@@ -12,9 +12,21 @@
 #define NO_CUSTOMERS 50
 #define BUFF 128
 
+sem_t bank_opens; //bank opens when all tellers are "ready to serve"
+sem_t tellers_open; //count tellers that are idle
 sem_t door;
 sem_t manager;
 sem_t safe;
+
+int idle_tellers[NO_TELLERS]; //stack for idle teller IDs
+int idle_top = 0; //top of stack
+
+// teller & customer communication
+sem_t customer_signal[NO_TELLERS]; //customer signals they are ready
+sem_t customer_ask[NO_CUSTOMERS]; //teller asks for transaction
+sem_t customer_tell[NO_CUSTOMERS];  //Deposit or Withdrawl
+sem_t customer_end[NO_CUSTOMERS]; //transaction is over
+sem_t customer_leave[NO_CUSTOMERS]; //the customer has left
 
 void logumentation(const char *type, int id, const char *bracket, int other_id, const char *msg) {
     if (bracket)
