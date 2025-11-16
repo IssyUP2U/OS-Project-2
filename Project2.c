@@ -20,6 +20,10 @@ sem_t safe;
 
 int idle_tellers[NO_TELLERS]; //stack for idle teller IDs
 int idle_top = 0; //top of stack
+int trans_type[NO_CUSTOMERS]; //store transaction types
+
+
+pthread_mutex_t idle_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 // teller & customer communication
 sem_t customer_signal[NO_TELLERS]; //customer signals they are ready
@@ -37,13 +41,28 @@ void logumentation(const char *type, int id, const char *bracket, int other_id, 
 }
 
 //customer routine
-void *customer(void *arg) {}
+void *customer(void *arg) {
+    int cid = (int)(intptr_t)arg; //store customer id (arg) as an int
+    int trans = (rand() % 2); //pick Deposit or Withdrawl
+    trans_type[cid] = trans; //set transaction type
+
+    int waitms = rand() % 101; //random wait time between 0 and 100
+    usleep(waitms * 1000);
+    printf("Customer waiting\n");
+
+}
 //teller routine
 void *teller(void *arg) {
     int tid = (int)(intptr_t)arg; //store teller id (arg) as an int
     char buf[BUFF];
     sprintf(buf, "is ready to serve");
     logumentation("Teller", tid, NULL, -1, buf);
+
+    pthread_mutex_lock(&idle_mutex);
+    idle_tellers[idle_top++] = tid; //add teller to stack and increment idle_top
+    pthread_mutex_unlock(&idle_mutex);
+    sem_post(&tellers_open); 
+
     
 }
 
