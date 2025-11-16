@@ -10,6 +10,30 @@
 
 #define NO_TELLERS 3
 #define NO_CUSTOMERS 50
+#define BUFF 128
+
+sem_t door;
+sem_t manager;
+sem_t safe;
+
+void logumentation(const char *type, int id, const char *bracket, int other_id, const char *msg) {
+    if (bracket)
+        printf("%s %d [%s %d]: %s\n", type, id, bracket, other_id, msg);
+    else
+        printf("%s %d: %s\n", type, id, msg);
+    fflush(stdout);
+}
+
+//customer routine
+void *customer(void *arg) {}
+//teller routine
+void *teller(void *arg) {
+    int tid = (int)(intptr_t)arg; //store teller id (arg) as an int
+    char buf[BUFF];
+    sprintf(buf, "is ready to serve");
+    logumentation("Teller", tid, NULL, -1, buf);
+    
+}
 
 int main( ) {
     srand(time(NULL));
@@ -21,11 +45,22 @@ int main( ) {
     sem_init(&safe, 0, 2); //teller must wait if safe is occupied by 2 tellers
 
     //create tellers
+    pthread_t teller_threads[NO_TELLERS];
     for (int i = 0; i < NO_TELLERS; i++) {
         pthread_create(&teller_threads[i], NULL, teller, (void*)(long)i);
     }
     //create customers
+    pthread_t customer_threads[NO_CUSTOMERS];
     for (int i = 0; i < NO_CUSTOMERS; i++) {
         pthread_create(&customer_threads[i], NULL, customer, (void*)(long)i);
     }
+    //waiting for customers to be created
+    for (int i = 0; i < NO_CUSTOMERS; i++) {
+        pthread_join(customer_threads[i], NULL);
+    }
+    //waiting for tellers to be created
+    for (int i = 0; i < NO_TELLERS; i++) {
+        pthread_join(teller_threads[i], NULL);
+    }
+
 }
