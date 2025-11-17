@@ -19,8 +19,8 @@ sem_t door;
 sem_t manager;
 sem_t safe;
 
-int idle_tellers[NO_TELLERS]; //stack for idle teller IDs
-int idle_top = 0; //top of stack
+int idle_tellers[NO_TELLERS]; //a stack for idle teller IDs
+int idle_top = 0;
 int trans_type[NO_CUSTOMERS]; //store transaction types
 
 int assigned_customer[NO_TELLERS];
@@ -29,13 +29,11 @@ pthread_mutex_t idle_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t rem_mutex = PTHREAD_MUTEX_INITIALIZER;
 int customers_remaining = NO_CUSTOMERS; //track customers still waiting
 
-// teller & customer communication
 sem_t customer_signal[NO_TELLERS]; //customer signals they are ready
 sem_t customer_ask[NO_CUSTOMERS]; //teller asks for transaction
-sem_t customer_tell[NO_CUSTOMERS];  //Deposit or Withdrawl
+sem_t customer_tell[NO_CUSTOMERS]; //Deposit or Withdrawl
 sem_t customer_end[NO_CUSTOMERS]; //transaction is over
-sem_t customer_leave[NO_CUSTOMERS]; //the customer has left
-
+sem_t customer_leave[NO_CUSTOMERS]; //the customer has left 
 
 void logumentation(const char *type, int id, const char *bracket, int other_id, const char *msg) {
     if (bracket)
@@ -45,7 +43,6 @@ void logumentation(const char *type, int id, const char *bracket, int other_id, 
     fflush(stdout);
 }
 
-//customer routine
 void *customer(void *arg) {
     int cid = (int)(intptr_t)arg; //store customer id (arg) as an int
     int trans = (rand() % 2); //pick Deposit or Withdrawl
@@ -53,10 +50,10 @@ void *customer(void *arg) {
 
     int waitms = rand() % 101; //random wait time between 0 and 100
     usleep(waitms * 1000);
-    printf("Customer waiting\n");
 
     sem_wait(&bank_opens); 
     sem_post(&bank_opens);
+
     sem_wait(&door); //enter door
     sem_wait(&tellers_open); //get idle teller
 
@@ -70,30 +67,34 @@ void *customer(void *arg) {
 
     sem_post(&customer_signal[tid]); //customer is ready
     sem_wait(&customer_ask[cid]); //wait for the tellers question
-    sem_post(&customer_tell[cid]);
+    sem_post(&customer_tell[cid]); 
     sem_wait(&customer_end[cid]); //wait for end of transaction
     sem_post(&customer_leave[cid]); //signal customer is leaving
     sem_post(&door);
+
     pthread_mutex_lock(&rem_mutex);
     customers_remaining--;
     int rem = customers_remaining;
     pthread_mutex_unlock(&rem_mutex);
 
+ 
     if (rem == 0) { //if 0 remaining customers
         pthread_mutex_lock(&assign_mutex);
         for (int t = 0; t < NO_TELLERS; ++t) {
-            assigned_customer[t] = -2;
-            sem_post(&customer_signal[t]);
+            assigned_customer[t] = -2;  
+            sem_post(&customer_signal[t]); 
         }
         pthread_mutex_unlock(&assign_mutex);
     }
+
+
     return NULL;
 }
 
-//teller routine
 void *teller(void *arg) {
-    int tid = (int)(intptr_t)arg; //store teller id (arg) as an int
+    int tid = (int)(intptr_t)arg;  //store teller id (arg) as an int
     char buf[BUFF];
+
     sprintf(buf, "is ready to serve");
     logumentation("Teller", tid, NULL, -1, buf);
     sem_post(&teller_ready); //signal a teller is ready
@@ -101,7 +102,7 @@ void *teller(void *arg) {
     pthread_mutex_lock(&idle_mutex);
     idle_tellers[idle_top++] = tid; //add teller to stack and increment idle_top
     pthread_mutex_unlock(&idle_mutex);
-    sem_post(&tellers_open); 
+    sem_post(&tellers_open);
 
     while (1) {
         sem_wait(&customer_signal[tid]); //wait for a customer
@@ -115,12 +116,12 @@ void *teller(void *arg) {
             logumentation("Teller", tid, NULL, -1, buf);
             break;
         }
+
         sprintf(buf, "asks customer %d for transaction type", cid);
         logumentation("Teller", tid, "Customer", cid, buf);
         sem_post(&customer_ask[cid]); //signal that customer is being asked something
         sem_wait(&customer_tell[cid]); //wait for customer response pluhhhh
 
-        extern int trans_type[NO_CUSTOMERS];
         int trans = trans_type[cid];
 
         if (trans == 1) { // Withdrawal
@@ -130,48 +131,56 @@ void *teller(void *arg) {
             sprintf(buf, "is waiting to talk to the manager");
             logumentation("Teller", tid, "Manager", -1, buf);
             sem_wait(&manager);
+
             sprintf(buf, "is talking to the manager");
             logumentation("Teller", tid, "Manager", -1, buf);
-
             //teller and manager interaction
-            int ms = 5 + rand() % (30 - 5 + 1); //5-30 ms
+            int ms = 5 + rand() % 26;
             sprintf(buf, "is starting manager interaction (%d ms)", ms);
             logumentation("Teller", tid, "Manager", -1, buf);
+
             usleep(ms * 1000);
+
             sprintf(buf, "ending manager interaction");
             logumentation("Teller", tid, "Manager", -1, buf);
 
             sem_post(&manager);
+
             sprintf(buf, "is done with the manager");
             logumentation("Teller", tid, "Customer", cid, buf);
         }
-    sprintf(buf, "is going to the safe");
-    logumentation("Teller", tid, "Customer", cid, buf);
-    sprintf(buf, "is waiting to enter the safe");
-    logumentation("Teller", tid, "Safe", -1, buf);
-    sem_wait(&safe); //wait for safe to have an open spot
 
-    sprintf(buf, "in safe performing transaction");
-    logumentation("Teller", tid, "Safe", -1, buf);
+        sprintf(buf, "is going to the safe");
+        logumentation("Teller", tid, "Customer", cid, buf);
 
-    int ms2 = 10 + rand() % (50 - 10 + 1); //10 to 50ms
-    sprintf(buf, "is accessing the safe (%d ms)", ms2);
-    logumentation("Teller", tid, "Customer", cid, buf);
-    usleep(ms2 * 1000);
-    sprintf(buf, "end transaction in safe");
-    logumentation("Teller", tid, "Customer", cid, buf);
+        sprintf(buf, "is waiting to enter the safe");
+        logumentation("Teller", tid, "Safe", -1, buf);
+        sem_wait(&safe); //wait for safe to have an open spot
 
-    sem_post(&safe); //leave safe
-    sprintf(buf, "has left the safe");
-    logumentation("Teller", tid, "Customer", cid, buf);
+        sprintf(buf, "in safe performing transaction");
+        logumentation("Teller", tid, "Safe", -1, buf);
 
-    sprintf(buf, "is telling the customer the transaction is complete");
-    logumentation("Teller", tid, "Customer", cid, buf);
-    sem_post(&customer_end[cid]);
+        int ms2 = 10 + rand() % 41; //10 to 50ms
+        sprintf(buf, "is accessing the safe (%d ms)", ms2);
+        logumentation("Teller", tid, "Customer", cid, buf);
+        usleep(ms2 * 1000);
+
+        sprintf(buf, "end transaction in safe");
+        logumentation("Teller", tid, "Customer", cid, buf);
+
+        sem_post(&safe); //leave safe
+
+        sprintf(buf, "has left the safe");
+        logumentation("Teller", tid, "Customer", cid, buf);
+
+        sprintf(buf, "is telling the customer the transaction is complete");
+        logumentation("Teller", tid, "Customer", cid, buf);
+        sem_post(&customer_end[cid]);
 
         sprintf(buf, "is waiting for customer to leave");
         logumentation("Teller", tid, "Customer", cid, buf);
         sem_wait(&customer_leave[cid]);
+
         sprintf(buf, "the customer has left");
         logumentation("Teller", tid, "Customer", cid, buf);
 
@@ -181,17 +190,15 @@ void *teller(void *arg) {
         sem_post(&tellers_open);
 
         pthread_mutex_lock(&assign_mutex);
-        assigned_customer[tid] = -1;
-        pthread_mutex_unlock(&assign_mutex);
+        if (assigned_customer[tid] != -2) 
+            assigned_customer[tid] = -1;
+            pthread_mutex_unlock(&assign_mutex);    
     }
 
     return NULL;
 }
 
-int main( ) {
-    srand(time(NULL));
-    int r = rand() % 10; //random number between 0 and 9
-
+int main() {
     //initialize semaphoresssss
     sem_init(&bank_opens, 0, 0);
     sem_init(&tellers_open, 0, 0);
@@ -210,29 +217,30 @@ int main( ) {
         sem_init(&customer_leave[i], 0, 0);
     }
     //initialization done
-    
+
     for (int i = 0; i < NO_TELLERS; i++) assigned_customer[i] = -1; //all tellers set to unassigned
     //create tellers
     pthread_t teller_threads[NO_TELLERS];
-    for (int i = 0; i < NO_TELLERS; i++) {
+    for (int i = 0; i < NO_TELLERS; i++)
         pthread_create(&teller_threads[i], NULL, teller, (void*)(long)i);
-    }
-    for (int i = 0; i < NO_TELLERS; i++) sem_wait(&teller_ready); //wait for tellers to be ready before creating customers
-    for (int i = 0; i < NO_CUSTOMERS; i++) sem_post(&bank_opens); //bank opens
-    printf("The bank is now opened\n");
 
-    //create customers
+    for (int i = 0; i < NO_TELLERS; i++)
+        sem_wait(&teller_ready); //wait for tellers to be ready before creating customers
+
+    for (int i = 0; i < NO_CUSTOMERS; i++)
+        sem_post(&bank_opens); //bank opens
+
+    printf("The bank is now opened\n"); 
+
     pthread_t customer_threads[NO_CUSTOMERS];
-    for (int i = 0; i < NO_CUSTOMERS; i++) {
+    for (int i = 0; i < NO_CUSTOMERS; i++)
         pthread_create(&customer_threads[i], NULL, customer, (void*)(long)i);
-    }
 
+    for (int i = 0; i < NO_CUSTOMERS; i++)
+        pthread_join(customer_threads[i], NULL);
 
-     //wait for customer threads to end
-    for (int i = 0; i < NO_CUSTOMERS; ++i) pthread_join(customer_threads[i], NULL);
-
-    //wait for teller threads to end
-    for (int i = 0; i < NO_TELLERS; ++i) pthread_join(teller_threads[i], NULL);
+    for (int i = 0; i < NO_TELLERS; i++)
+        pthread_join(teller_threads[i], NULL);
 
     printf("\nPROGRAM FINISHED\n");
     return 0;
